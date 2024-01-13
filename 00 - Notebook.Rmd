@@ -1,0 +1,42 @@
+---
+title: "My First Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+#Rolling Stones on Spotify
+
+This would be my introduction.
+
+## Popularity and live
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(readr)
+
+rs <- read.csv("Data/rolling_stones.csv")
+
+
+```
+
+Least popular songs
+```{r}
+least_populare <- rs %>%
+  filter(song_popularity>0) %>%
+  arrange(song_popularity) %>%
+  head(1) %>%
+  select(song_name) %>%
+  pull(song_name)
+```
+
+The least popular song is: `r least_populare`.
+
+Most popular songs
+```{r}
+rs %>%
+  arrange(song_popularity) %>%
+  tail(3) %>%
+  select(song_name,song_popularity)
+```
+
+## Popularity over the years

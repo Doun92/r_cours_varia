@@ -1,0 +1,172 @@
+---
+title: "Project 1"
+output:
+  html_document:
+    df_print: paged
+---
+# Part 1
+
+The analysis that will be done below comes from a survey of participants at a conference in the Netherlands.
+
+The participants were asked the following questions:
+
+* What university do you come from?
+* What is your position?
+* How many employees are there in your research group?
+* How many Ph.D. students are there in your research group?
+* How many postdocs are there in your research group?
+* How many professors are there in your research group?
+
+All the answers are stored in a csv called survey.csv
+
+The first action to do in any project is the loading of the required libraries.
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(tidyr)
+```
+
+Once the libraries are correctly installed, we can open the file with the data inside and store it in a meaningful variable.
+
+```{r}
+survey_data = read_csv("data/survey.csv")
+```
+Once the dataset is loaded, we can see some metadata about it.
+The dataset has:
+
+* "," as a delimiter (which confirms that the columns are separeted by a commun in this text documet,)
+* 30 rows
+* 8 columns in total
+  * 3 columns have categorical data (University, Position, Sizes)
+  * 5 columns have numerical data (...1, Number of employees, Number of PhD students, Number of postdocs, Number of professors)
+
+Looking at the columns name, one seems to have a strange name: "...1"
+
+AS seen in the course, it is also always useful to get a first look at the head of the data and discover what does this strange column means in terms of data.
+```{r echo=TRUE}
+head(survey_data,10)
+```
+The column "...1" seems to be the index of the rows. Let's rename it as index then.
+Let's also rename the columns to remove the spaces between words.
+```{r}
+survey_data <- rename(survey_data,
+       "Index" = "...1",
+       "Number_of_employees" = "Number of employees",
+       "Number_of_PhD_students" = "Number of PhD students",
+       "Number_of_postdocs" = "Number of postdocs",
+       "Number_of_professors" = "Number of professors")
+```
+
+## How many survey participants were there?
+There are <ins>30 participant</ins> to this survey.
+
+## What are the data types of each column?
+The datatypes are the following:
+
+* Column "Index": integer
+* Column "University": character
+* Column "Position": character
+* Column "Number of employees": integer
+* Column "Number of PhD students": integer
+* Column "Number of postdocs": integer
+* Column "Number of professors: integer
+* Column "Sizes": character
+
+## What are the top 3 universities with the most survey participants?
+To answer this question, we will need to group by university, the count the row per university.
+```{r}
+survey_data %>%
+  group_by(University) %>%
+  mutate(Total = n()) %>%
+  arrange(desc(Total)) %>% 
+  distinct(University, Total) %>%
+  head(3) %>%
+  ungroup()
+```
+The top 3 of universities with the most survey participants are:
+
+* Delft University of Technology
+* Eindhoven University of Technology
+* University of Groningen
+
+# Part 2
+Obtain a bar chart of the number of survey participants for the different positions given in the column Position.
+
+```{r}
+position_table <- survey_data %>%
+  group_by(Position) %>%
+  mutate(Total = n()) %>%
+  distinct(Position, Total)
+
+ggplot(data = position_table,
+       mapping = aes(x = Position, 
+                     y = Total))+
+  geom_col() +
+  coord_flip() +
+  labs(title = "Number of participants per position")
+```
+
+# Part 3
+There is a column named Sizes which depends on the number of the employees
+
+There are some errors in this columns, so we need to correct it.
+First, we extract all the possibles values present in the column:
+```{r}
+survey_data %>%
+  distinct(Sizes)
+```
+Then, we create the same column correcting it:
+```{r}
+count_sizes <- survey_data %>%
+  mutate(Sizes = case_when(
+    Number_of_employees <= 20 ~ "Small (1 to 20)",
+    Number_of_employees > 20 & Number_of_employees <= 50 ~ "Medium (20 to 50)",
+    Number_of_employees > 50 & Number_of_employees < 200  ~ "Large (50 to 200)",
+    Number_of_employees > 200 ~ "Extra large (over 200)"
+  )) %>%
+  select(Sizes) %>%
+  group_by(Sizes) %>%
+  mutate(count_sizes = n()) %>%
+  distinct() %>%
+  ungroup()
+
+ggplot(data = count_sizes,
+       mapping = aes(x = Sizes, 
+                     y = count_sizes))+
+  geom_col() +
+  coord_flip() +
+  labs(title = "Number of participants per position")
+
+```
+# Part 4
+
+Now, we need to see the percentage of employees who are Ph.D students, postdocs and professors.
+
+
+```{r}
+survey_data <- transform(survey_data,Index = as.character(Index))
+
+category_table <- survey_data %>%
+  select(Index,Number_of_PhD_students,Number_of_postdocs,Number_of_professors) %>%
+  #pivot_longer(!Index,
+  pivot_longer(c(Number_of_PhD_students,Number_of_postdocs,Number_of_professors),
+               names_to = "category",
+               values_to = "number") %>%
+  mutate(Research_group_id = case_when(
+    nchar(Index) == 1 ~ paste("0", Index, sep=""),
+    TRUE ~ Index
+  )) %>%
+  arrange(desc(Research_group_id))
+
+ggplot(category_table, aes(fill=category, y=number, x=Research_group_id)) + 
+    geom_bar(position="fill", stat="identity")+
+    coord_flip()+
+    labs(title = "Employees role percentage for each group",
+       subtitle = "We can see that groups have very different splits",
+       x = "Research group ID",
+       y = "Percentage")+
+    theme(legend.position="bottom")
+```
+

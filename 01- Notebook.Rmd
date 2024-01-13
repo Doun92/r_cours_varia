@@ -1,0 +1,209 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(tidyr)
+library(stringr)
+```
+
+
+```{r}
+stones_data <- read_csv("Data/rolling_stones.csv")
+
+```
+
+```{r}
+stones_data %>%
+  select(-release_year) %>%
+  bind_rows(stones_data)
+```
+```{r}
+bind_rows(
+  select(stones_data, -release_year),
+  stones_data)
+```
+
+```{r}
+head(stones_data,10)
+```
+```{r}
+stones_data %>%
+  select(song_name,album_name,song_popularity) %>%
+  group_by(album_name) %>%
+  mutate(number_of_songs = n()) %>%
+  mutate(max_popularity = max(song_popularity)) %>%
+  mutate(avg_popularity = sum(song_popularity)/number_of_songs) %>%
+  pivot_longer(cols=c(number_of_songs,avg_popularity),
+               names_to = "metrics",
+               values_to = "value") %>%
+  distinct(album_name,metrics,value)
+```
+```{r}
+stones_data %>%
+  group_by(live, release_year) %>%
+  summarise(number_of_songs = n()) %>% 
+  pivot_wider(names_from = live, 
+              values_from = number_of_songs, 
+              values_fill = list(number_of_songs = 0)) %>%
+  rename(not_live = `FALSE`, live = `TRUE`)
+```
+
+
+Avec les données sales:
+```{r}
+sales_report <- read_tsv("Data/sales_data.tsv")
+
+sales_report <- rename(sales_report,
+               order_id="Data Report Date: 2018-01-01",
+               "quantity"="...2",
+               "unit_price"="...3",
+               "order_date"="...4",
+               "status"="...5",
+               "product_type"="...6",
+               "country"="...7",
+               "deal_size"="...8") %>%
+            filter(
+               order_id != "Report Analyst: John Sand",
+               order_id != "order_id",
+               )
+
+```
+
+```{r}
+head(sales_report,10)
+```
+
+```{r}
+sales_report %>%
+  group_by(product_type) %>%
+  mutate(number_of_orders = n()) %>%
+  mutate(total_quantity = sum(quantity)) %>%
+  pivot_longer(cols=c(number_of_orders,total_quantity),
+               names_to = "metrics",
+               values_to = "value") %>%
+  distinct(product_type,metrics,value) %>%
+  ungroup()
+```
+
+```{r}
+sales_report %>%
+  mutate(sales = unit_price * quantity) %>%
+  group_by(status, deal_size) %>%
+  summarise(sales = sum(sales)) %>% 
+  tidyr::pivot_wider(names_from = deal_size, 
+           values_from = sales, 
+           values_fill = list(sales = 0))
+```
+
+# with ggplot2
+```{r}
+department_revenue <- tibble(
+  department = c("Grocery", "Toys"),
+  aug_2018 = c(4234, 2349),
+  sep_2018 = c(234, 2454),
+  oct_2018 = c(98, 2354),
+  nov_2018 = c(78698, 8900),
+  dec_2018 = c(9876, 8901)
+)
+
+department_revenue %>%
+  pivot_longer(cols = c(aug_2018, sep_2018, oct_2018, nov_2018, dec_2018), 
+               names_to = "months", 
+               values_to = "revenue") %>%
+  mutate(months = lubridate::parse_date_time(months, orders="%m_%Y", truncated = 4)) %>%
+  ggplot(aes(x=months, y=revenue, color=department)) +
+  geom_line()
+```
+
+If we want to do a plot that compares all the grades one candidate received against the ones from the other candidates, we will need to put them all in one column first. Then we could use color=, fill= or anything else to distinguish chart elements on the new JUDGE column.
+
+Which reshaping code would give you this chart?
+
+```{r}
+candidate_grades <- tibble(
+  candidate = c("A", "B", "C"),
+  judge_1 = c(15, 19, 13),
+  judge_2 = c(13, 12, 14),
+  judge_3 = c(16, 11, 14)
+) 
+```
+
+```{r}
+candidate_grades %>%
+  tidyr::pivot_longer(
+    cols = c(-candidate), 
+    names_to = "judge", 
+    values_to = "grade") %>%
+  ggplot(mapping = aes(x=candidate, y=grade, fill=judge)) +
+  geom_col()
+```
+
+Can what we learned about summarising and {ggplot2} be combined with pivoting?
+Certainly! Imagine that you want to create a plot that shows only the minimum and maximum grade that each learner received. It’s not only plotting that works well with long columns, it’s also summarising.
+From the planning stage, we can see that we will need data looking like this:
+
+This is not what we are starting with… But combining pivot and the functions we learned from {dplyr} could get us there.
+
+What code is missing from the snippet below to produce the desired tibble?
+```{r}
+candidate_grades <- tibble(
+  candidate = c("A", "B", "C"),
+  judge_1 = c(15, 19, 13),
+  judge_2 = c(13, 12, 14),
+  judge_3 = c(16, 11, 14)
+)
+
+candidate_grades %>%
+  tidyr::pivot_longer(
+    cols = c(judge_1, judge_2, judge_3), 
+    names_to = "judge", 
+    values_to = "grade") %>%
+
+  group_by(candidate) %>% 
+  summarise(min_grade = min(grade),
+            max_grade = max(grade)) %>% 
+ 
+  tidyr::pivot_longer(
+    cols = c(min_grade, max_grade), 
+    names_to = "grade_type", 
+    values_to = "grade")
+```
+
+# Star Wars
+```{r}
+starwars %>%
+  select(name, films, vehicles, starships)
+```
+```{r}
+starwars %>%
+  select(name, films, vehicles, starships) %>%
+  unnest_longer(films) %>%
+  group_by(films) %>%
+  summarise(n_of_chars = n())
+```
+
+
+```{r}
+budget_19s <- tibble(
+  country = c("France", "Germany"),
+  budget_1900 = c(1234, 4511),
+  budget_1901 = c(5449,  3214),
+  budget_1902 = c(8790, 9876)
+)
+
+budget_20s <- tibble(
+  country =  c("France", "Germany"),
+  budget_2000 = c(9877, 9867),
+  budget_2001 = c(1243,  5769)
+)
+
+bind_cols(budget_19s, budget_20s)
+```

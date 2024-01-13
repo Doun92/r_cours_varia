@@ -1,0 +1,180 @@
+---
+title: "Introduction to Data Visualisation"
+output:
+  html_document:
+    df_print: paged
+---
+# Introduction to Data Visualisation
+In this Notebook, we will see the basis of Data Visualization.
+
+Let's first load the libraries and the data
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(readr)
+library(dplyr)
+library(lubridate)
+
+stones_data = read_csv("Data/rolling_stones.csv")
+sales_report = read_tsv("Data/sales_data.tsv")
+
+```
+
+A scatter plot is useful to compare two numeric data together.
+
+```{r}
+ggplot(data = stones_data,
+       mapping = aes(x = song_popularity, 
+                     y = song_duration,
+                     color = live)) +
+  geom_point() +
+  theme_dark()
+```
+
+A bar plot is useful to compare numeric value with categorical ones.
+```{r}
+ggplot(data = stones_data,
+       mapping = aes(x = album_name, 
+                     y = song_duration, 
+                     fill = live)) + 
+  geom_col() + 
+  coord_flip() + # coord_flip() inverts x/y, converting a vertical chart to a horizontal chart
+  labs(title = "Total duration of each album",
+       subtitle = "Using colors to show live vs studio songs",
+       caption = "Source: Rolling Stone Spotify Dataset",
+       x = "Album Name",
+       y = "Duration",
+       fill = "Live song?") +
+  theme_dark()
+
+```
+
+It's always better to fix the data instead of the visualisation
+```{r}
+stones_data_bef_1995 <- stones_data %>%
+  filter(release_year < 1995)
+
+ggplot(data = stones_data_bef_1995,
+       mapping = aes(x = song_popularity, 
+                     y = song_duration,
+                     color = album_name)) +
+  geom_point() +
+  labs(title = "Did song duration impact song popularity?",
+       subtitle = "Each dot represents a song, colored by album",
+       x = "Popularity",
+       y = "Duration") +
+  theme_dark()
+```
+
+How to drop duplicates.
+```{r}
+stones_data_unique <- distinct(stones_data, release_year,live)
+```
+
+Let's play with aggregate functions.
+In this data, we create a column with the all time highest popularity.
+```{r}
+stones_data %>%
+  mutate(highest_popularity = max(song_popularity)) %>%
+  mutate(popularity_ratio = song_popularity/highest_popularity) %>%
+  select(song_name, song_popularity, popularity_ratio)
+```
+
+Summarize grouped data
+```{r}
+stones_data %>%
+  mutate(all_time_best_score = max(song_popularity)) %>%
+  group_by(live) %>%
+  summarise(average_popularity = mean(song_popularity)) %>%
+  ungroup()
+
+```
+
+Prenons la chanson la plus courte en live et non live
+```{r}
+stones_data %>%
+  group_by(release_year, live) %>%
+  summarise(shortest_song = min(song_duration))%>%
+  ungroup()
+```
+
+Group_by and mutate
+```{r}
+stones_data %>%
+  group_by(release_year) %>%
+  mutate(max_duration = max(song_duration)) %>%
+  ungroup()
+```
+
+Filter albums by number of tracks
+```{r}
+stones_data %>%
+  group_by(album_name) %>%
+  filter(n() > 18) %>%
+  ungroup()
+```
+
+A try with another dataset
+```{r}
+sales_report_w_revenue <- rename(sales_report,
+               order_id="Data Report Date: 2018-01-01",
+               "quantity"="...2",
+               "unit_price"="...3",
+               "order_date"="...4",
+               "status"="...5",
+               "product_type"="...6",
+               "country"="...7",
+               "deal_size"="...8") %>%
+            filter(
+               order_id != "Report Analyst: John Sand",
+               order_id != "order_id",
+               )%>%
+            mutate(revenue = unit_price * quantity)
+
+ggplot(data = sales_report_w_revenue,
+       mapping = aes(x = deal_size,
+                     y = revenue)) +
+  geom_col() +
+  scale_y_continuous(label = scales::comma) + # Changing the y axis to use comma style numbers
+  labs(title = "Revenue generated stacked by deal size",
+       subtitle = "The Medium size still generates the largest revenue",
+       x = "Deal Size",
+       y = "Revenue") +
+  theme_dark()
+```
+
+Summarize data
+
+```{r}
+summarized_sales <- sales_report_w_revenue %>%
+  mutate(sales = unit_price*quantity) %>%
+  summarise(number_of_order = n(),
+            total_sales = sum(sales))
+```
+
+Let's group by
+```{r}
+sales_report_w_revenue %>%
+  mutate(sales = unit_price*quantity) %>%
+  group_by(product_type)%>%
+  summarise(sum_of_sales = sum(sales)) %>%
+  ungroup()
+```
+
+```{r}
+sales_report_w_revenue %>%
+  mutate(year = year(dmy(order_date))) %>%
+  group_by(year) %>%
+  mutate(orders_per_year = n()) %>%
+  filter(year=="2005") %>%
+  ungroup()
+
+```
+
+```{r}
+sales_report_w_revenue %>%
+  mutate(sales = unit_price * quantity) %>%
+  group_by(country) %>%
+  mutate(percent_of_sales_for_country = sales / sum(sales)) %>%
+  ungroup()
+
+```

@@ -1,0 +1,236 @@
+---
+title: "Project 2"
+author: "Daniel Escoval"
+date: "06/01/2024"
+output: 
+  html_document:
+    number_sections: true   
+    toc: true               
+    code_folding: show      
+    df_print: paged             
+    highlight: zenburn          # adding a style to the code chunks
+    toc_float:                  # makes a "floating" table of contents
+      collapsed: false              # where sections are not collapsed
+      smooth_scroll: true           # and highlighted when scrolled over
+---
+
+# Introduction
+For this project we use a very minimalist dataset. Two groups (one of students and one of professors) have been asked a set of questions. You can find the excel file in the resources, with two different sheets (one for the students and one for the professors).
+
+We don’t even know what the questions were, we only have each question ID in the first column. Moreover, whoever collected the data probably did not know about “good practices” since they decided to organise the data by respondent type (one table for students, one table for professors).
+
+The study was anonymous, so we don’t get the individual answers. Each line represents one question and the columns contain the number of persons that gave a specific answer. Although the datasets are small, you will have to show that you can join them to solve the exercises.
+
+# The data
+
+Under the Resources tab of this unit you will find a zip file with the following database:
+
+* likert_survey.xlsx
+
+This database contains the data from a Likert test that was conducted on a set of students and professors. The test consisted of 32 questions each of which had one of the four possible replies:
+
+* strongly disagree
+* disagree
+* agree
+* strongly agree
+
+The table students contains the number of students who chose each of the four possible replies for each of the questions, while the table professors counts the replies of the professors.
+
+Your task is to investigate this dataset and try to gain some insights from it.
+
+# Exercices
+
+## Part 1
+
+>Load the data into R. Here you get more experience extracting data from a Excel file. You can use the {readxl} package to load the data, from the two different sheets, in two different tibbles.
+
+First, we need to load the libraries
+```{r message=FALSE, warning=FALSE}
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(stringr)
+```
+
+Then, we need to load the data.
+As it was written, we need to load 2 datasets, one for the students, and another one for the professors
+```{r}
+students_tibble <- read_xlsx("data/likert_survey.xlsx", sheet = "students")
+professors_tibble <- read_xlsx("data/likert_survey.xlsx", sheet = "professors")
+```
+
+## Part 2
+Once the data is loaded, answer the following questions:
+
+* What is the total number of answers obtained from students?
+* What is the total number of answers obtained from professors?
+* Does each question have the same number of answers?
+
+This will show that you can extract basic information from tibble. You might need a bit of reshaping as the tools we learned work a lot better with long datasets.
+
+### Question 1
+What is the total number of answers obtained from students?
+Let's create one big column with all the answers, then summarise it.
+```{r}
+students_tibble %>%
+  select(!QuestionID) %>%
+  pivot_longer(cols=c(TotallyDisagree,Disagree,Agree,TotallyAgree),
+             names_to = "metrics",
+             values_to = "value") %>%
+  summarise(total_answers = sum(value))
+```
+
+There is a total of <ins> 7748 </ins> answers from the students.
+
+### Question 2
+What is the total number of answers obtained from professors?
+
+```{r}
+professors_tibble %>%
+  select(!QuestionID) %>%
+  pivot_longer(cols=c(TotallyDisagree,Disagree,Agree,TotallyAgree),
+             names_to = "metrics",
+             values_to = "value") %>%
+  summarise(total_answers = sum(value))
+```
+There is a total of <ins> 3654 </ins> answers from the professors.
+
+
+### Question 3
+Does each question have the same number of answers?
+
+```{r}
+students_tibble %>%
+  pivot_longer(cols=c(TotallyDisagree,Disagree,Agree,TotallyAgree),
+             names_to = "Opinions",
+             values_to = "value") %>%
+  group_by(QuestionID) %>%
+  summarise(total_value=sum(value)) %>%
+  mutate(maximum_value = max(total_value)) %>%
+  mutate(minimum_value = min(total_value)) %>%
+  summarise(maximum_value=maximum_value,minimum_value=minimum_value) %>%
+  distinct()
+```
+
+As we can see, not all the question have the same number of values, meaning not all the questions have the same value.
+This was a quick look, we can also have it wider.
+With the table below, we can have a better look of how many answers we got per question.
+```{r}
+students_tibble %>%
+  pivot_longer(cols=c(TotallyDisagree,Disagree,Agree,TotallyAgree),
+             names_to = "Opinions",
+             values_to = "value") %>%
+  group_by(QuestionID) %>%
+  summarise(total_value=sum(value)) %>%
+  pivot_wider(names_from = QuestionID, 
+           values_from = total_value)
+```
+
+We will do exactly the for the professors tibble:
+```{r}
+professors_tibble %>%
+  pivot_longer(cols=c(TotallyDisagree,Disagree,Agree,TotallyAgree),
+             names_to = "Opinions",
+             values_to = "value") %>%
+  group_by(QuestionID) %>%
+  summarise(total_value=sum(value)) %>%
+  mutate(maximum_value = max(total_value)) %>%
+  mutate(minimum_value = min(total_value)) %>%
+  summarise(maximum_value=maximum_value,minimum_value=minimum_value) %>%
+  distinct()
+```
+As we can see, not all the question have the same number of values, meaning not all the questions have the same value.
+This was a quick look, we can also have it wider.
+With the table below, we can have a better look of how many answers we got per question.
+```{r}
+professors_tibble %>%
+  pivot_longer(cols=c(TotallyDisagree,Disagree,Agree,TotallyAgree),
+             names_to = "Opinions",
+             values_to = "value") %>%
+  group_by(QuestionID) %>%
+  summarise(total_value=sum(value)) %>%
+  pivot_wider(names_from = QuestionID, 
+           values_from = total_value)
+```
+
+## Part 3
+Obtain side-by-side bar charts comparing the distribution of answers of the students versus the professors for each question. For this part, you might want to refresh your knowledge on mini charts with facets, covered in S10U07.
+
+### Preparation of the dataset
+
+First, create a new row in each dataset which differs Students and Professors.
+Secondly, we put it together.
+
+```{r}
+professors_tibble <- professors_tibble %>%
+  mutate("respondent" = "Professor")
+
+students_tibble <- students_tibble %>%
+  mutate("respondent" = "Student")
+
+tibble_for_viz <- professors_tibble %>%
+  bind_rows(students_tibble) %>%
+  pivot_longer(cols=c(TotallyDisagree,Disagree,Agree,TotallyAgree),
+               names_to = "metrics",
+               values_to = "value")
+
+ggplot(tibble_for_viz, aes(x=metrics, y=value, fill=respondent)) +
+  geom_col(position = "dodge") +
+  facet_wrap(vars(QuestionID)) +
+  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+  
+```
+
+
+## Part 4
+When we talked about aggregate functions, we mentioned things like sum(), mean(), max()…
+
+These functions work quite well when we for example compare classroom numeric grades (like students get at exams). On such data it makes sense to check the mean as a measure of “average” score:
+
+* student1=4/6
+* student2=3/6
+* student3=2/6
+* student4=3/6
+* student5=6/6
+
+On a small dataset like the one above, a formula like the “mean” ((4+3+2+3+6)/5 = 3.6) could be used to talk about the “average” score.
+
+With Likert scale data like we are using in this project (and other categorical/text grades), using the mean as an average measure would not work well.
+
+* student1=agree
+* student2=agree
+* student3=totally_disagree
+* student4=totally_agree
+* student5=disagree
+
+On a small dataset like the one above, we cannot use the mean formula as it has no meaning (agree+agree+totally_disagree+...)/5 = ???). So analysts will use alternative methods of “averaging” and will for example find which answer was given the most often.
+
+This will let you give insights about the dataset like:
+
+* For question 24, the most common answer was agree for students, but totally_agree for professors.
+
+For this last part, provide a solution to the following exercise:
+
+By binding, reshaping, grouping and filtering, create one single tibble that shows only the type of answer with the highest number of answers, for each question, and for each respondent type.
+question_id 	respondent 	answer_type 	answer_count
+
+
+| question_id | respondent |  answer_type  | answer_count |
+|:-----------:|:----------:|:-------------:|:------------:|
+| …           | …          | …             | …            |
+| 23          | …          | …             | …            |
+| 24          | student    | agree         | 104          |
+| 24          | professor  | totally_agree | 56           |
+| 25          | …          | …             | …            |
+| …           | …          | …             | …            |
+```{r}
+tibble_for_viz %>%
+  rename(
+    question_id = QuestionID,
+    answer_count = value,
+    answer_type = metrics
+  ) %>%
+  group_by(question_id, respondent) %>%
+  slice(which.max(answer_count))
+```
