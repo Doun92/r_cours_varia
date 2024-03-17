@@ -1,0 +1,125 @@
+---
+title: "Machine Learning"
+output: html_notebook
+---
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+```
+
+We will use the dataset cars.
+```{r}
+head(cars)
+```
+
+Since our example has two variables, an obvious choice is a scatter plot.
+```{r}
+ggplot(data = cars, 
+       mapping = aes(x = speed, y = dist)) +
+  geom_point() +
+  labs(title = "The Relationship between Speed and Stopping Distance",
+       x = "Speed",
+       y = "Stopping Distance")
+```
+
+We are in the simple case of a single independent variable so our formula can simply be written as formula = dist ~ speed, and our dataset is data = cars. Putting these together we obtain the command
+```{r}
+cars_lm <- lm(dist ~ speed, data = cars)
+cars_lm
+```
+To see if our model is any good, we can compare the values predicted by the model versus the actual values. To access the values predicted by the model we need to use the `fitted.values` attribute from a regression object `cars_lm`. We will save these values in a new column of the dataset called `predicted`.
+
+```{r}
+cars$predicted <- cars_lm$fitted.values
+cars
+```
+
+We can now plot both the predicted values against the true values to get a visual idea of how well our model did.
+
+```{r}
+ggplot(data = cars,
+       mapping = aes(x = dist, y = predicted)) +
+  geom_point() +
+  labs(title = "Stopping Distance: Predicted and Observed Values",
+       x = "Actual Stopping Distance",
+       y = "Predicted Stopping Distance")
+```
+```{r}
+summary(cars_lm)
+```
+Let's have a new datamodel
+```{r}
+cars_new <- tibble(speed = c(30, 42, 37, 48, 60))
+```
+We can use the predict() function to predict the distance variable for each of these new observations using the regression model cars.lm that we just built. The two main arguments to predict() are object (the regression object), and newdata (the dataframe of new data). Let's give this a try
+```{r}
+predict(object = cars_lm,  newdata = cars_new) 
+```
+So there we have it, our first machine learning model! Of course in general machine learning models are much more complex, and the theory behind the algorithms can get quite advanced but sometimes even simple models such as linear regression can get us quite far.
+
+##Exercice
+In the Analysis subject, we saw that for the cars data set, the model y=a\*x2 was more appropriate than the model y=a\*x+b. Repeat the same prediction steps perfomed here above but using the new model y=a\*x2.
+```{r}
+cars_lm_quadr <- lm(dist ~ I(speed^2), data = cars)
+cars_lm_quadr
+```
+Let's add the quadratic model to the dataset
+```{r}
+cars$predicted_quadr <- cars_lm_quadr$fitted.values
+cars
+```
+
+Finally, let's plot it
+```{r}
+ggplot(data = cars,
+       mapping = aes(x = dist, y = predicted_quadr)) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  geom_abline(aes(intercept =0, slope=1), linetype  =2)+
+  labs(title = "Stopping Distance: Predicted and Observed Values",
+       x = "Actual Stopping Distance",
+       y = "Predicted Stopping Distance")
+```
+# Unsupervised LEarning
+```{r}
+edelweiss <- readr::read_csv("Data/edelweiss_data.csv")
+
+# remove variety column:
+edelweiss_km <- edelweiss %>% select(-variety)
+
+# function to compute total within-cluster sum of squares (wss):
+wss_func <- function(k) {
+  kmeans(scale(edelweiss_km), k, nstart = 10)$tot.withinss
+}
+
+# create tibble with k values and corresponding wss values:
+k_values <- 1:8
+wss_values <- purrr::map_dbl(k_values, wss_func)
+wss_tib <- tibble::tibble(k = k_values, wss = wss_values)
+
+# plot wss for k = 1 to k = 8:
+wss_tib %>% ggplot(aes(x = k, y = wss)) +
+  geom_line() +
+  geom_point(size = 3) +
+  scale_x_continuous(breaks = k_values) +
+  labs(title = "Selection of k value for k-means algorithm",
+       x = "Number of clusters (k)",
+       y = "Total within-clusters sum of squares (wss)") +
+  theme_minimal()  
+```
+In the above code, we create a function wss_func() to compute the WSS value for each k candidate. In this function we use the kmeans() function of R base.
+
+Run the follwing code after having downloaded the edelweiss_data.csv data set from Resources:
+```{r}
+edelweiss_km <- edelweiss %>% 
+  select(-variety)
+
+km3 <- kmeans(scale(edelweiss_km), centers = 3, nstart = 10)
+km3
+```
+In the last row of the above code, we apply the scale() function to the edelweiss_km tibble. What is the effect of this function ? (in the options below, SD stands for standard deviation)
+This is the right answer ! You can easily check that the output is a standardised data set. To do so, compute the average - using mean() - and the standard deviation - using sd() - for each column of edelweiss_km. The average should be equal to 0, and the standard deviation should be equal to 1 for both petal_width and petal_length.
+Why is it important to standardise / rescale the data with the scale() function before running the k-means algorithm ?
+
+As seen before, the calculation of distances between points is key in the k-means algorithm. The data rescale ensures that these calculations are not dominated by variables with wide ranges. With the scale() function, we make sure that all the variables have a similar importance which does not depend on units of measurement.

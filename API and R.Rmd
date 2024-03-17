@@ -1,0 +1,130 @@
+---
+title: "API on R"
+output: html_notebook
+---
+
+```{r message=FALSE, warning=FALSE}
+library(httr)
+library(stringr)
+library(purrr)
+```
+Using an IP locator
+
+In {httr}, the main request functions were named after the HTTP verbs. So
+
+*to send a GET request, we can use the function httr::GET().
+*to send a POST request, we can use the function httr::POST().
+*etc…
+
+If you look closely at Insomnia window, you will see that there was also a menu to choose the HTTP verb.
+
+```{r}
+geo_ip <-  httr::GET("https://ipwhois.app/json/128.179.146.244")
+```
+
+Not only do we run the GET request, but we also save the result in a variable named geo_ip.
+
+If R executed the code without complaining (no errors), the request was probably successful. You can type geo_ip in the R Console to see what it contains.
+
+```{r}
+geo_ip
+```
+Calling the variable geo_ip doesn't show us the content but some metadata. Some of these fields were also shown in Insomnia.
+
+To see the content of the response, we need the httr::content() function.
+
+```{r}
+httr::content(geo_ip, as = "text")
+```
+This looks like the expected content, but it is all squashed into one long string. The formatting in Insomnia was much more readable. Luckily, httr::content() is very well designed. We can change the function to have this JSON converted to the most fitting R data structure (for JSON it is usually a list). Rather than asking for the text response, let's require a parsed object.
+
+```{r}
+httr::content(geo_ip, as = "parsed")
+```
+This will be a lot easier to work with. We can take full advantage of the list capabilities. If you want to look only at the city, just call it:
+
+```{r}
+geo_content <- httr::content(geo_ip, as = "parsed")
+geo_content[["city"]] 
+```
+RStudio is very helpful with list too. You can use the View() function to get an interactive view of the object.
+
+If this still feels a bit overwhelming, it is normal. Getting confident with APIs takes time. If you at least feel that you are starting to see the moving parts, you are well on your way. You managed to grab data from the internet, and convert it to a usable variable, all in code: this is a major achievement!
+
+```{r}
+ips <- c("85.159.237.59", "89.238.178.213", "185.216.34.220")
+
+
+str_glue("https://ipwhois.app/json/{ips}") %>%
+  map(GET) %>%
+  map(content) %>% 
+  map(purrr::pluck,  "country")
+```
+This code gets a bit of time to get used to. However if you add thousands of IPs, the code would not get any longer which is a very powerful thing. 
+
+```{r}
+ips <- c("85.159.237.59", "89.238.178.213", "185.216.34.220")
+
+get_country <- function(url) {
+  GET(url) %>%
+    content() %>%
+    purrr::pluck("country")
+}
+
+str_glue("https://ipwhois.app/json/{ips}") %>%
+  map(get_country) # using our custom function
+```
+# Working with API I
+There are lots of single purpose APIs available on the internet. We will look an example: Geocode.xyz
+## Get latitude and longitude for any address
+If you are developing an application that needs map, you will probably quickly need to find the geographic coordinates of addresses. Geocode.xyz is a simple geocoding service that provides both a normal website and an API. The service can do two things:
+
+*take geographic coordinates (i.e latitude and longitude) and give you a post address
+*take a post address and give you back its geographic coordinates
+
+We can try the website first.
+
+The keywords "EPFL, Lausanne, Switzerland" found latitude/longitude 46.52211,6.56638.
+
+Using the website is nice and easy. But if we need to do this for hundreds of addresses and/or in a completely automated way, an API would be better.
+
+On the API page, we can see a Quick Start example:
+
+Forward Geocoding:
+curl 'https://geocode.xyz/Hauptstr.,+57632+Berzhausen?json=1'
+
+curl is a standard Linux program to send HTTP requests. The developers from our R library httr were inspired a lot by curl when they created httr. Because APIs can be used from any programming language, and writting examples for all programming language is impossible, it is fairly common that the examples use curl.
+
+What matters in this example is that the URL of interest is: https://geocode.xyz/Hauptstr.,+57632+Berzhausen?json=1
+
+Hauptstr., 57632 Berzhausen is a German address. So we could rewrite a more general version of our URL.
+
+Part 1: https://geocode.xyz/
+Part 2: address keywords separated with + signs
+Part 3: ?json=1
+
+Let's try our EPFL example in R with httr.
+```{r}
+epfl_geo <-  httr::GET("https://geocode.xyz/epfl+lausanne+switzerland?json=1") 
+```
+Look at the content of the response with httr::content().
+```{r}
+httr::content(epfl_geo)
+```
+It looks like we got a JSON object back, stored as a character string. The httr::content() function is very smart, it can parse a JSON string and convert it to an R data structure (numeric, vector, list…). This is what happens automatically when we use parsed for the as argument or when we don't use the as argument at all.
+
+We now have a list back. Again, RStudio can help you navigate this object in a more interactive way with the View() function.
+
+Since lists have named values, they are very convenient to quickly extract what you are interested in. If we just want the latitude (latt) and longitude (longt), we could do:
+```{r}
+epfl_geo_data <- httr::content(epfl_geo)
+epfl_geo_data[["longt"]]
+epfl_geo_data[["latt"]]
+```
+Let's try to enter these coordinates in Google Maps to see where it takes us.
+You might get coordinates that are even closer to your real location. But even the fact that the API can tell I am in Lausanne is already impressive. If you want to categorize the visitors from your site by area, knowing their position in a few kilometers range is already, for most people, more than enough!
+
+## API wrappers
+Now that you know how to perform a query, it's a good time to know that some API's are known to be a little bit… picky. For instance, it is not strange to have our requests throttled when using geocode.xyz, because of API restrictions on the amount of queries per second: 
+
+# Working with data APIs 2

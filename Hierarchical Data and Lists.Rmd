@@ -1,0 +1,14 @@
+---
+title: "Hierarchical Data and Lists "
+output: html_notebook
+---
+
+First, we import libraries
+```{r message=FALSE, warning=FALSE}
+library(jsonlite)
+```
+
+Secondly, let's import our data.
+```{r}
+clients_data_json <- read_json("data/clients.json")
+```

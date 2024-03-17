@@ -1,0 +1,152 @@
+---
+title: "Scraping"
+output:
+  html_document:
+    df_print: paged
+---
+#Requesting the HTML of a website
+Let's use first our very basic website from the HTML unit, so that we grasp the scraping core concept.
+
+We could use the {httr} package to get the HTML from websites. After all, {httr} just grabs the content available at a URL and makes it available in R: it doesn't care if it is a data API or a website. 
+
+```{r message=FALSE, warning=FALSE}
+library(httr)
+library(rvest)
+library(xml2)
+library(dplyr)
+library(stringr)
+```
+
+```{r}
+simple_request <- httr::GET("https://epfl-exts.github.io/data50-scraping/simple_page.html")
+simple_request
+```
+You can see that {httr} even tries to give us a preview of the content, with the first few lines of HTML. Like with API, the content of the {httr} response is still fully accessible with httr::content().
+
+The {httr} default approach is nice but has some limitations. Once we have the content, we are still left with a large and "hard-to-parse" blob of HTML content in text. This content should at least be recognised as an xml_document (the super family HTML is part of).
+
+If you add the argument as = "parsed" to your httr::content() call, you get the HTML content as xml_document rather than raw text.
+
+```{r}
+content <- httr::content(simple_request, as = "parsed")
+content
+```
+
+For example, if we only want to grab all the HTML tables in a xml_document and quickly convert them to R tibbles, we can use rvest::html_table().
+```{r}
+content <- httr::content(simple_request, as = "parsed")
+rvest::html_table(content) 
+```
+The [[1]] is the sign that we got a list object. Each item in the list created by rvest::html_table() would be a data.frame (which we can convert to tibble with tibble::as_tibble()). Since there was only one table on the page, the list only has one item.
+
+Also {xml2} has a function named read_html() which both grab the HTML content from a URL and parse it to an xml_document. So we can use this rather than two {httr} functions:
+```{r}
+simple_request <- httr::GET("https://epfl-exts.github.io/data50-scraping/simple_page.html")
+page_html <- httr::content(simple_request, as = "parsed")
+
+# Or this
+
+page_html <- xml2::read_html("https://epfl-exts.github.io/data50-scraping/simple_page.html")
+```
+
+Remember that once again all these packages are designed to work well together, so we can take advantage of the pipe operator (%>%). Rather than saving each step in variables, you could easily get the table in one go:
+
+```{r}
+"https://epfl-exts.github.io/data50-scraping/simple_page.html" %>%
+  xml2::read_html() %>%
+  rvest::html_table() 
+```
+#Scraping Wikipedia
+Let's try the same technique on the page "Cantons of Switzerland", available at https://en.wikipedia.org/wiki/Cantons_of_Switzerland. The page has a table with statistics per Canton.
+```{r}
+canton_html <- xml2::read_html("https://en.wikipedia.org/wiki/Cantons_of_Switzerland")
+
+canton_html %>%
+    rvest::html_table()
+```
+This is unfortunate… This table seemed well formatted though. Maybe there are other tables on the page. With {rvest}, you can easily isolate only the HTML elements that you need. Each element is called a node (i.e. an HTML tag and all its children), so the {rvest} function to isolate nodes is named rvest::html_nodes().
+
+html_nodes() takes two arguments: first, the xml_document to scan. Second, an argument called css= with a description of what we are looking for (i.e. a CSS selector). This can be:
+
+
+* A tag name (e.g div, table, ul…)
+* A class name. Class names are written with a "." prefix, so that html_nodes don't search them in tag names — e.g .red-button, .blue-shadow.
+*An id name. Id names are written with a "#" prefix, so that html_nodes don't search them in tag names — e.g #title, #infobox.
+
+As explained before, selectors can be combined in many ways:
+
+* To search for a tag that has both classes dark and important, you would use selector .dark.important.
+* To search for only the table tags that have the class dataset, you would use selector table.dataset
+* To search for a tag <span> with class light that has at least one parent that is a div, you would use selector div span.light (note that this doesn't have to be the closest parent)
+* To search for a tag span with class light whose direct (closest) parent is a div, you would use selector div > span.light
+
+Let's see how many HTML <table> are on the page:
+```{r}
+canton_html %>%
+    rvest::html_nodes(css="table")
+```
+At the time of this writing, the page has 13 tables! And many of them seem to be more related to navigation than to content (e.g. class names like navbox-... are good hints that an element is for navigation). No wonder that rvest::html_table() was confused: if any of these 13 tables is badly formatted, the function fails. 
+
+This is really how scraping goes: every page is a new challenge to isolate the content that you are interested in.
+
+Next we will see how to find targets (i.e. CSS selectors) that isolate the content we need. There are several ways to do this.
+
+## Inspecting source code
+Modern web browsers have tools to help you inspect how webpages are made. Here I am using Google Chrome. If you click with the right button of your mouse on any item in the page and choose "Inspect", a panel will open at the bottom showing you the page code at the corresponding position.
+
+## Finding targets for the table
+If you look at the (grand)parent item of this highlighted "Coat of Arms" cell, you can see that it is a <table> with class wikitable sorted jquery-tablesorter. Let's try to isolate this (note that there are no space between classes, just the dots).
+
+```{r}
+canton_html %>%
+    rvest::html_nodes(css = ".wikitable.sortable.jquery-tablesorter")
+```
+No luck here, we did not find any node. If I go back to our list of 17 tables, I can see that item [2] and [3] did have the first two classes.
+
+It might be that the third (i.e jquery-tablesorter) is not part of the raw HTML and was added by javascript. jquery is a very popular Javascript library so this is already a hint.
+
+This is an important detail to keep in mind: {httr} will download you the raw HTML, but Google Chrome inspector shows you the final output (after it was enhanced with JavaScript). If the difference between raw HTML and JavaScript-enhanced HTML sounds foreign, don't forget to read the unit on HTML again.
+
+If you want to see the original Page Source (i.e raw HTML before javascript) you can click right again on an element and choose "View Page Source". Unfortunately, this will not take you straight to the corresponding position.
+
+So why do we have 2 tables. It turns out that there is another table in the page.
+
+Now try to get use rvest::html_nodes() with just the classes wikitable and sortable.
+```{r}
+tables <- canton_html %>%
+  rvest::html_nodes(css = ".wikitable.sortable") %>%
+  rvest::html_table()
+
+cantons <- tables[[1]] %>%
+  select(-1) %>%
+  rename_with(~ str_remove(., "\\[+\\w+\\s*\\w*]"), everything()) %>%
+  dplyr::mutate_all(str_remove_all, "\\[+\\w+\\s*\\w*]")
+
+```
+It is amazing that we can get two nearly usable tables in just 4 lines of code. These 4 lines might still seem a bit mysterious, but you have to imagine how confident you would be if you used it 10 times, 100 times… Even for people that do not want to go deep in programming, 4 lines is not impossible to get used to.
+
+Now if we stay fair, four lines only take us 90% of the way. There are still troubles with the table, as often with scraped data. Look at column Since: rather than being just a year number, it sometimes has text like [Note 5]. Same problem with column Population, most population numbers have another two digits in square bracket (e.g 1,487,969[13]). If you compare your R dataframe to the webpage you will see that these are references to footnotes. They make a lot of sense in Wikipedia context, but are just noise for us. They would need to be cleaned up if we wanted to do some math with the population numbers.
+
+This type of problems are another good example of why we prefer to use APIs whenever we can. Scraped data was not meant to be scraped, so we always have to fight with it. Sometimes the fight is easy, sometimes it is really hard.
+
+#Scraping non-table data
+Try to grab all the nodes that match the CSS selector .group .items a for the HTML available at https://sport.unil.ch/?pid=26.
+
+```{r}
+sports_names <- xml2::read_html("https://sport.unil.ch/?pid=26")%>%
+  rvest::html_nodes(css = ".group .items a") %>%
+  rvest::html_text()
+
+sports_urls <- xml2::read_html("https://sport.unil.ch/?pid=26")%>%
+  rvest::html_nodes(css = ".group .items a") %>%
+  rvest::html_attr("href")
+```
+
+You could then combine these two vectors into a tibble with {dplyr} bind_cols() function and this way, even without <table> tags, we can go step by step from messy HTML to clean R objects…
+
+```{r}
+dplyr::bind_cols(sports=sports_names, links=sports_urls)
+```
+##Conclusion
+
+Getting in the scraping mindset is not easy in the beginning, but it becomes a very powerful skill. Make sure you understand these examples and don't hesitate to discuss them in a 1-on-1: you will need a basic understanding of scraping for the projects at the end of the course because we will sometimes only give you a website as your data source.

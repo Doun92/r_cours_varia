@@ -1,0 +1,118 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+Toujours commencer par importer les librairies
+```{r message=FALSE, warning=FALSE}
+library(readxl)
+library(tidyr)
+library(janitor)
+library(readr)
+library(dplyr)
+library(stringr)
+```
+
+Importation des données.
+```{r}
+sales_report <- read_xlsx("data/sales_data_sample.xlsx", sheet = "sales_data_sample") %>%
+  row_to_names(row_number = 2) %>%
+  clean_names()
+```
+#Advanced usage of select()
+##Smarter selection with contains(), starts_with() and ends_with()
+everything() is not the only helper to create column selection. You can use contains("some text") to select all the columns that have some text in their name. It is even possible to be more specific and indicate where "some text" should be in the names with starts_with("some text") (i.e at the beginning of the name) and ends_with("some text") (i.e at the end of the name).
+
+###Exercice 1
+In the example below, use the select() function with starts_with() to select only the columns with name starting with "song_" in dataframe stones_data.
+
+```{r}
+stones <- read_csv("data/rolling_stones.csv")
+
+stones %>%
+  select(starts_with("song_"))
+
+stones %>%
+  select(ends_with("_year"), starts_with("song_"))
+```
+
+###Exercice 2
+Using sales_xls, how would keep all columns, but place first the ones that contain "LINE" in their name?
+```{r}
+sales_report %>%
+  select(contains("LINE"),everything())
+```
+
+##Select columns by position
+We only selected columns by name, but you can also select them by position. Using number, you can perform selection without thinking about the column names. In the example below, we keep only the first two columns and invert their position.
+```{r}
+stones %>%
+  select(2,1)
+```
+###Exercice
+In sales_xls, how would you place the column 3 at the first position, if you did not know its name?
+```{r}
+sales_report %>%
+  select(2,everything())
+```
+##Select columns by type
+We can also select columns according to their type with a new function select_if().
+
+The select_if() function is not really linked to select() like everything() or contains() are. You do not use select_if() inside select(), you use it in place of select(). It is a "top-level" {dplyr} function, just like select(), filter(), mutate()…
+
+select_if() takes two arguments:
+
+* a dataframe, usually provided via the %>% sign.
+* a condition function like is.numeric(), is.character()…
+
+Only the columns that return TRUE to the condition function will be kept.
+
+Note that when we provide functions as arguments (like here with is.numeric or is.character), we write them without the parenthesis (). When you have the parenthesis behind the function name, you execute it straightaway which is not what we want. We only want select_if to take the function and use it to run it's tests in the background.
+
+###Exercice
+Using sales_xls, try to select only the numeric columns.
+```{r}
+sales_report %>%
+  select_if(is.numeric)
+```
+## Extract column as a vector
+
+If you `select()` just one column, you still get a `tibble` with one column. Whatever happens, `select()` always give you a `tibble`.
+
+Sometimes, with single columns, you want a `vector` not a `tibble`. To get a `vector`, you can use the `pull()` function from `{dplyr}`.
+
+###Exercice
+Using the str_glue() function from {stringr}, create a new column that contains the full address for each order:
+```{r}
+addresses <- sales_report %>%
+  mutate(full_address = str_glue("{`address_line1`}, {`postal_code`} {`city`}")) %>%
+  pull(full_address)
+
+addresses[34]
+```
+
+## **`select()` recap**
+
+By now, you should be familiar with the `select()` functions and what they are used for. These are the functions we covered:
+
+- [✓] `dplyr::select()`
+- [✓] `dplyr::select_if()`
+- [✓] `dplyr::everything()`
+- [✓] `dplyr::contains()`
+- [✓] `dplyr::starts_with()`
+- [✓] `dplyr::ends_with()`
+- [✓] `dplyr::pull()`
+
+#Advanced Text-based row conditions
+###Exercice
+In the example below, try to find all the songs with the word "Love" in their name.
+```{r}
+filter(stones, str_detect(song_name, "Love"))
+```
+###Exercice 2
+Modify the code we just wrote and check that the number of rows found is the same as before.
+```{r}
+filter(stones, str_detect(song_name, regex("love", ignore_case=TRUE)))
+```

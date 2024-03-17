@@ -1,0 +1,238 @@
+---
+title: "Project 3"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Project 3
+URL of the instruction cage for *[Project 3](https://learn.extensionschool.ch/learn/programs/foundations-of-data-science-v1/subjects/project-3-v1/units/project-3-exercise-v1)*.
+
+## Introduction
+The owners of a Fitness Club would like to get an overview of their club members, and perform some analyses of the data they collect on a regular basis.
+
+The purpose of the analysis is here purely descriptive. Their first question is: "Who are our members ?"
+
+This question being a bit vague, we recommend them to be more specific. One specific question could be "What is the proportion of female and male Fitness Club members ?"
+
+## The Data
+We have two data sets from the Fitness Club. They are in zip files you can download from Resources.
+
+In the first file, fitness_members.csv, each row corresponds to a member of the club.
+
+For each member, information was collected and entered in several columns. In the output below, the data set was stored in the R object fitness_members. 
+
+The first step is to centralize the downloading of the different libraries used during this project.
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(tidyverse)
+library(janitor)
+# Work with maps
+library(purrr)
+# More modern way to read files
+library(readr)
+```
+
+The second step is the downloading and storing into a general value, the datasets.
+```{r}
+fitness_members_raw <- read.csv("data/fitness_members.csv", colClasses = c(
+  id = "character",
+  recommendation_from = "character")
+  )
+fitness_tracking_raw <- read.csv("data/fitness_tracking.csv", colClasses = c(id="character"))
+
+fitness_members_raw_from_readr <- read_csv("data/fitness_members.csv")
+# read_csv() permet de mieux gérer l'improtation de fichier d'un pdv plus mdoerne.
+#fitness_tracking_raw <- read.csv("data/fitness_tracking.csv", colClasses = c(id="character"))
+```
+Note that we had to specifically ask R to load some columns as character columns to not miss the leading 0s.
+
+Here are the last 10 rows of the fitness_members dataset.
+```{r}
+fitness_members_raw %>%
+  tail(n=10)
+```
+The Fitness Club has 420 members. For each member, we have the following columns:
+
+* id, the Member ID
+* recommendation_from (id number of the member who recommended her or him to join the club)
+* gender (F or M)
+* birth_date
+* registration_date
+* m_category (membership category Economy, Balance or Premium)
+* height in cm
+* weight in kg
+
+In the second file, fitness_tracking.csv, the Fitness Club monitors the weight of each member on a weekly basis. The columns of this data set are the following:
+
+* id, the Member ID
+* wk_001 (weight measured 1 week after registration date)
+* wk_002 (weight measured 2 weeks after registration date)
+* following weeks…
+
+To give a parallel, here are the last 10 items from this second csv.
+```{r}
+fitness_tracking_raw %>%
+  tail(n=10)
+```
+# Exercices
+
+## Part 1
+A simple R function from the {janitor} package could be used to answer the question "What is the proportion of female and male Fitness Club members ?". Do you remember this function ? With this function, we get the following output in R:
+```{r}
+fitness_members_raw %>% 
+  tabyl(gender) %>%
+  adorn_pct_formatting(digits=1)
+```
+There are therefore 167 female members and 253 male members in the fitness club, corresponding to 39.8% and 60.2%, respectively. This is a very basic example of data analysis. You can obviously go much further with the fitness club data.
+
+Other examples of data analysis with this data set are covered below and in the next project, just after the Analysis subject.
+
+## Part 2
+Each member can obtain a discount by recommending friends to join the Fitness Club. The data set indicates for each member (in variable recommendation_from) if he or she joined the Fitness Club after a recommendation from another member. The owners would like to know How many successful recommendations were made by each member ?
+To answer that question, compute a new variable named number_recommendations and add it to the dataset using functions from the tidyverse packages that were presented and used in previous units.
+
+How many successful recommendations has member 000115 made ?
+```{r}
+number_recommendations <- fitness_members_raw %>%
+  filter(recommendation_from != "")
+
+number_recommendations %>%
+  filter(recommendation_from == "000115")
+```
+The user "000115" successfully recommended the Fitness center to 3 persons.
+
+## Part3
+What is the maximum number of successful recommendations made by a member of the Fitness Club ? 5
+```{r}
+number_recommendations %>%
+  group_by(recommendation_from) %>%
+  mutate(nb_validations = length(recommendation_from)) %>%
+  distinct(recommendation_from, .keep_all = TRUE) %>%
+  arrange(desc(nb_validations)) %>%
+  select(recommendation_from, nb_validations) %>%
+  head(1)
+```
+
+## Part 4
+What is the id code of the member who made the maximum number of successful recommendations ?
+We already have this answer in part 3
+
+## Part 5
+How many female members in the Premium membership category made one or more successful recommendations ? 1
+```{r}
+# Creation of a vector with all the ids from female ID
+f_id <- fitness_members_raw %>%
+  filter(gender=="F", m_category =="Premium") %>%
+  pull(id)
+
+number_recommendations %>%
+  filter(recommendation_from %in% c(f_id)) %>%
+  distinct(recommendation_from)
+```
+
+## Part 6
+Create a new variable bmi in the fitness_members data set, corresponding to the BMI (Body Mass Index) at registration date. BMI
+
+is defined as follows:
+
+BMI=W/H2
+
+where the weight W
+is expressed in kilograms (kg), and the height H
+
+in meters (m). Warning: be aware that height values are given in centimeters (cm) in the fitness_members.csv file, and not in meters (m).
+
+What is the BMI value of member 000042 at registration date ? 27.8072
+```{r}
+fitness_members_raw %>%
+  mutate(bmi = weight / (height/100)^2) %>%
+  filter(id=="000042") %>%
+  select(id, bmi)
+```
+## Part 7
+As mentioned in the introduction, the Fitness Club has 420 members. Some of them have not yet completed the first week. Those members are not included in the fitness_tracking.csv data file.
+
+Which of the following fitness club members have not yet reached week 1?
+```{r}
+inside_fitness_tracking <- fitness_tracking_raw %>%
+  pull(id)
+
+did_not_reach_week_1 <- fitness_tracking_raw %>%
+  filter(is.na(wk_001)) %>%
+  pull(id)
+
+
+fitness_members_raw %>%
+  filter(!id %in% c(inside_fitness_tracking) | id %in% c(did_not_reach_week_1))
+```
+
+## Part 8
+The data in the fitness_tracking.csv file will be analysed in Project 4. To do so, a specific action is required to transform this wide data set into a long data set. Do you remember which {tidyr} function could be used to do so ? Use it and name the resulting data set fitness_tracking_long.
+```{r}
+# Only get wk_000
+week_one_tibble <- fitness_members_raw %>%
+  mutate(wk_000 = weight) %>%
+  select(id,height,wk_000)
+
+colnames_fitness_tracker <- colnames(fitness_tracking_raw)
+# Let's just remove the id column from this vector
+colnames_fitness_tracker <- colnames_fitness_tracker[!colnames_fitness_tracker == 'id']
+colnames_fitness_tracker <- append(colnames_fitness_tracker, 'wk_000')
+
+# List of dfs to join them
+list_df <- list(week_one_tibble, fitness_tracking_raw)
+
+# Join both tibbles
+fitness_tracking_with_wk_000 <- list_df %>%
+  reduce(left_join, by='id')
+
+# Now we can pivot longer
+fitness_tracking_long <- fitness_tracking_with_wk_000 %>%
+  pivot_longer(cols = all_of(colnames_fitness_tracker), names_to = "week_nb", values_to = "weight") %>%
+  drop_na()
+
+fitness_tracking_long %>%
+  nrow()
+
+```
+
+## Part 9
+Use the data set fitness_tracking_long to compute weekly BMI values for each member. Again, a very useful function from the tidyverse package can help you here.
+
+What is the BMI value of member 000024 at week 11 ?
+```{r message=FALSE, warning=FALSE}
+calculate_bmi <- function(w,h){
+  w / (h/100)^2
+}
+  
+fitness_tracking_long <- fitness_tracking_long %>%
+  group_by(id) %>%
+  mutate(bmi = calculate_bmi(weight,height)) %>%
+  mutate_if(is.numeric,
+            round,
+            digits = 1)
+
+fitness_tracking_long %>%
+  filter(id=='000024', week_nb=='wk_011')
+```
+## Part 10
+For each fitness member in the fitness_tracking_long data, compute the BMI percentage change compared to the previous week by using the lag() function.
+What is the BMI percentage change for member 000015 from week 6 to week 7 ?
+```{r message=FALSE, warning=FALSE}
+from_previous_row <- function(previous_wk, this_wk){
+  (this_wk/previous_wk) * 100
+}
+
+fitness_tracking_long <- fitness_tracking_long %>%
+  arrange(id, week_nb) %>%
+  group_by(id) %>%
+  mutate(last_row = lag(bmi,1)) %>%
+  mutate(evolution_in_percentage = ((bmi/last_row)*100)-100) %>%
+  mutate_if(is.numeric,
+            round,
+            digits = 2)
+
+fitness_tracking_long %>%
+  filter(id=='000015',week_nb=='wk_007')
+```

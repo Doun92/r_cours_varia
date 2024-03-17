@@ -1,0 +1,50 @@
+---
+title: "Encrypting data with R"
+output: html_notebook
+---
+
+Importation of the libraries
+```{r}
+library(encryptr)
+```
+
+Generation of both private and public keys
+```{r}
+genkeys() ## Generates both public and private keys in current directory
+```
+
+Let's first try with encrypting a vector. more precisely a string.
+```{r}
+encrypted_name <- "Hello :)" %>%
+  encrypt_vec(public_key_path = "./id_rsa.pub") ## By default, will check for id_rsa.pub in the current directory
+
+```
+
+Now that's encrypted, let's decrypt it.
+
+```{r}
+encrypted_name %>%
+  decrypt_vec(private_key_path = "./id_rsa")
+```
+
+As simple as that, the encrypted character string has been decrypted back to its original form.
+
+#Question 1
+The following character string contains an encrypted message. Decrypt it using the private key in the exercise resources (./exercise-resources/id_rsa) and the password bookhouse, and select the unencrypted message from the options below.
+
+The string to decrypt: 
+"a81e94bf2fa0a9ec6a6805ed5fe95deb0c2751d7c2722a0fbaa5223dabe6fb7a4e39df7c8299997ef5ef71720c8342773980a0a5f3e12b26352ed12f5b95e7b63b7e66deb78e803d5164db7386574d9b7e7bcb402b4964de488121d73b43affc2377ef7abd7941b4283a07aeaa84eabafa460434d8796d49d19474e9d35c53577f0c8895bcc4d9a933ca5efc57bfd30637e395e7b8dba6c563bdb666c88191011ff76e94ca363845cd374a646422db196b778ac4ce0e9d00a1262dc7ee157071323a041298d316e348544de373c7e51336401d3df6ad601e2efed69cbf913c54f00675080067caeb11018adfc949142543663d7c69f00e54272cf8201c2e627e"
+
+```{r}
+encrypted_str_ex_1 <- "a81e94bf2fa0a9ec6a6805ed5fe95deb0c2751d7c2722a0fbaa5223dabe6fb7a4e39df7c8299997ef5ef71720c8342773980a0a5f3e12b26352ed12f5b95e7b63b7e66deb78e803d5164db7386574d9b7e7bcb402b4964de488121d73b43affc2377ef7abd7941b4283a07aeaa84eabafa460434d8796d49d19474e9d35c53577f0c8895bcc4d9a933ca5efc57bfd30637e395e7b8dba6c563bdb666c88191011ff76e94ca363845cd374a646422db196b778ac4ce0e9d00a1262dc7ee157071323a041298d316e348544de373c7e51336401d3df6ad601e2efed69cbf913c54f00675080067caeb11018adfc949142543663d7c69f00e54272cf8201c2e627e"
+
+encrypted_str_ex_1 %>%
+  decrypt_vec(private_key_path = "exercice files/id_rsa")
+```
+
+#Question 2
+Decrypt the message.txt.encryptr.bin file located in the exercise resources, and select its text from the options below. You should use the same password to decrypt the file.
+```{r}
+decrypt_file(.path = "exercice files/message.txt.encryptr.bin",
+             private_key_path = "exercice files/id_rsa")
+```

@@ -1,0 +1,32 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+Libraries importation
+```{r warning=FALSE}
+library(DBI)
+library(tibble)
+library(dplyr)
+```
+
+```{r}
+poesie_db <- dbConnect(RSQLite::SQLite(), "data/db.sqlite3")
+
+dbListTables(poesie_db)
+
+# Only close connection when you don't need to talk to the database anymore
+# (usually toward the end of your script)
+
+```
+
+Let's Select the columns of the correct table.
+```{r}
+poetry <- tbl(poesie_db, "ecriture_poeme")
+poetry
+class(poetry)
+```
+
+At the end, don't forget to disconnect from the database.
+```{r}
+dbDisconnect(poesie_db)
+```

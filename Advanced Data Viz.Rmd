@@ -1,0 +1,330 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+Toujours commencer par importer les librairies
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+# Clean the columns headers
+library(janitor)
+# Work with dates
+library(lubridate)
+# Work with sdtrings
+library(stringr)
+# Pour la visualisation de données
+library(ggplot2)
+# Pour les cartes
+library(ggmap)
+# Pour des cartes interactives
+library(leaflet)
+# Pour des cartes animées
+library(gganimate)
+```
+
+Importation des données.
+```{r}
+airbnbreport_raw <- read.csv("data/airbnb_texas_rental.csv") %>%
+  clean_names()
+```
+Look at each column in the tibble and convert column to the appropriate data type if needed.
+Now if we look at the columns, here are some patterns that you might want to keep a watch on:
+
+* numeric columns imported as character
+* date columns imported as character
+
+Remember that glimpse(<tibble>) can be a good alternative to View() when you mostly want to check the data type of each column. Here it would give:
+```{r}
+glimpse(airbnbreport_raw)
+```
+There are three columns that you need to change, each with its own set of challenges. The columns are date_of_listing, bedrooms_count and average_rate_per_night. Please try to do this by yourself for a while before reading the solution. 
+
+```{r}
+airbnbreport_raw %>%
+  mutate(date_of_listing = parse_date_time(date_of_listing,orders="bY"))
+```
+We can also see that average_rate_per_night and bedrooms_count are imported as character, but they would be much more useful as numeric (so that we can do calculation with them).
+
+Before converting them blindly, let's check if we have any unexpected values. There are more than 18,000 rows, so we don't want to check them manually.
+
+My first guess is that column bedrooms_count has only a few unique values, so I can pull() the column to a vector and use unique() on it. 
+```{r}
+airbnbreport_raw %>%
+  pull(bedrooms_count) %>%
+  unique
+```
+There is a "Studio" value! That's why the column was imported as character.
+For now we could use if_else() to convert this value to something compatible with numeric (e.g. "0.5") and then convert the entire column to numeric.
+```{r}
+temp <- airbnbreport_raw %>%
+  mutate(bedrooms_count = if_else(bedrooms_count == "Studio",
+                                  "0.5", bedrooms_count),
+         bedrooms_count = as.numeric(bedrooms_count))
+```
+Last challenge was to convert average_rate_per_night column to a numeric column. Again, rather than converting blindly, I would like to make sure that there are no unexpected values (e.g. "No price"). However, there will probably be a massive number of unique values, so even checking these manually would be risky. Let's see how many unique values this column has:
+
+```{r}
+airbnbreport_raw %>%
+  pull(average_rate_per_night) %>%
+  unique %>%
+  length
+```
+Using str_detect() from the {stringr} package, I can filter() rows to keep only the ones with values in one column that match a specific "text pattern". The way we write "text pattern" is called Regular Expression.
+Here we want to check which rows (if any) are not in the format:
+
+a dollar sign ($) followed by any number of digits, but nothing else.
+
+This format written as a "regular expression" is
+
+"^\\$[:digit:]+$"
+
+
+
+Ouch! Let's look at each part:
+
+Most characters can be used for the search. However some characters have special meaning (^ means "beginning of string", $ means "end of string"). If you want to search for a character that has a special meaning, you need escape the special meaning (i.e. put two backslashs in front of it \\):
+
+* ^\\$ : string starts (^) with a dollar sign (we need the backslashes \\ to remove $ special meaning which is "end of the string")
+* [:digit:] : any number
+* + : previous character (which is "any number") one or more times
+* $ : end of string (no other characters allowed)
+
+Since we want to get only the rows that don't match this pattern we wrap the entire str_detect() in parenthesis and put a ! in front of it. This transforms a logical vector to its opposite.
+
+…
+
+```{r}
+airbnbreport_raw %>%
+  filter(!(str_detect(average_rate_per_night, '^\\$[:digit:]+$')))
+```
+You would be right to be a bit skeptical, as having no match at all can be a bit suspicious. Maybe our regular expression was just badly written. Let's try to change one of the rate (e.g. "$60") to a string that should be invalid for our regular expression (e.g. "No Price") and rerun our test:
+```{r}
+airbnbreport_raw %>%
+  mutate(average_rate_per_night = 
+           if_else(average_rate_per_night == "$60", 
+                   "No Price", average_rate_per_night)) %>%
+  filter(!(str_detect(average_rate_per_night, "^\\$[:digit:]+$"))) 
+```
+This time we get 327 rows back, all with "No Price" for average_rate_per_night. I think we can now trust that our expression was working. Since there is no bad surprise in average_rate_per_night, removing the $ sign with str_replace() and using a simple as.numeric() on the result should give us a usable numeric column. 
+
+###Solution
+
+Let's fix our 3 columns in one pipeline and save the resulting tibble to a variable called airbnb.
+
+```{r}
+airbnbreport <- airbnbreport_raw %>%
+  mutate(
+    date_of_listing = 
+      parse_date_time(date_of_listing, orders="bY"),
+    bedrooms_count = if_else(bedrooms_count == "Studio",
+                             0.5, as.numeric(bedrooms_count)),
+    average_rate_per_night = 
+      as.numeric(str_replace(average_rate_per_night, "\\$", "")))
+```
+
+Remember that str_replace() is as smart as str_detect() and can take regular expressions (i.e. called pattern on the {stringr} cheatsheet). That means that you can make very sophisticated replacements in text, but it also means that you have to use "\\$" if you only want to remove a dollar sign ("$" alone means "end of string" in regular expressions).
+Now we have a clean tibble named airbnb that we will use to learn {ggplot2}.
+
+# Visualisation
+```{r}
+airbnbreport %>%
+  ggplot(mapping=aes(x= bedrooms_count, 
+                     y= average_rate_per_night))
+```
+If you try this code in RStudio Console tab, you will see that the skeleton of a plot starts to appear. We now have two axes that range from the minimum to the maximum value possible in their linked columns.
+
+If we said x=col1, y=col2, then {ggplot2} will create a X axis that goes from min(col1) to max(col1) and a Y axis that goes from min(col2) to max(col2). In our example, Y now goes from 10 (with a bit of padding, so rounded to 0) to 10000 and X goes from 0.5 (with some padding, so rounded to 0 again) to 13.
+
+The main area of the plot is still empty though, since we haven't said which plot type we want to draw yet.
+
+Let's add our second {ggplot2} function, using geom_jitter(). Here we choose geom_jitter() over geom_point() for a simple reason: since people with apartments of the same size tend to ask for similar rents, I am sure we will have overlapping points among our 18k apartments.
+
+```{r}
+airbnbreport %>%
+  ggplot(mapping=aes(x= bedrooms_count, 
+                     y= average_rate_per_night))+
+  geom_jitter()
+```
+We can now use labs() on our chart:
+```{r}
+ggplot(data=airbnbreport, 
+       mapping=aes(x=bedrooms_count, y=average_rate_per_night)) +
+  geom_jitter() +
+  labs(title="Rate per night vs number of bedrooms",
+       subtitle="More rooms isn't always more expensive",
+       caption="Data from AirBNB",
+       x="Bedrooms count", y="Average rate per night")
+```
+```{r}
+listings_per_day <- airbnbreport %>%
+  arrange(date_of_listing) %>%
+  group_by(date_of_listing) %>%
+  summarise(listings_count = n()) %>%
+  ungroup() %>%
+  mutate(cum_number_of_listings = cumsum(listings_count))
+
+listings_per_day %>%
+  ggplot(mapping=aes(x=date_of_listing, 
+                     y=cum_number_of_listings)) +
+  geom_line() 
+```
+```{r}
+listings_per_day_per_city <- airbnbreport %>%
+  group_by(date_of_listing, city) %>%
+  summarise(listings_count = n()) %>%
+  ungroup() %>%
+  arrange(date_of_listing) %>%
+  group_by(city) %>%
+  mutate(cum_number_of_listings = cumsum(listings_count)) %>%
+  ungroup()
+```
+Now if I use the same code as before, I will get a weird plot:
+
+```{r}
+listings_per_day_per_city %>%
+  ggplot(mapping=aes(x=date_of_listing, 
+                     y=cum_number_of_listings)) +
+  geom_line() 
+```
+geom_line() tries to plot one single line that goes through all the numbers in the tibble. And that is not what we want. We need one line per city so each line has only one row per date. For this we use the group= mapping.
+If you find the black lines a bit too stern, you could also map the color= to city, and get a different color for each city. Before you do it though, remember that there are a lot of cities and {ggplot2} will try to prepare a legend that explain which color means which city with hundreds of elements. Safer to remove the legend entirely.
+```{r}
+listings_per_day_per_city %>%
+  ggplot(mapping=aes(x=date_of_listing, 
+                     y=cum_number_of_listings)) +
+  geom_line(aes(group=city, color=city)) +
+  theme(legend.position = 'none') 
+```
+## Barplots
+```{r}
+listings_per_city <- airbnbreport %>%
+  group_by(city) %>%
+  summarise(number_of_listings = n()) 
+
+listings_per_city %>%
+  ggplot(mapping=aes(x=city, 
+                     y=number_of_listings)) +
+  geom_bar(stat="identity") 
+```
+Quite busy… Remember that we have hundreds of cities and geom_bar() will plot one bar per row in the tibble. Let's keep only the top 5.
+```{r}
+listings_per_city %>%
+  arrange(desc(number_of_listings)) %>%
+  head(5) %>%
+  ggplot(mapping=aes(x=city, 
+                     y=number_of_listings)) +
+  geom_bar(stat="identity") 
+```
+```{r}
+listings_per_city %>%
+  arrange(desc(number_of_listings)) %>%
+  head(5) %>%
+  ggplot(mapping=aes(x=city)) +
+  geom_bar() 
+```
+A
+```{r}
+    airbnbreport %>%
+      ggplot(aes(x="1", y=average_rate_per_night)) +
+      geom_point(alpha=0.01)
+```
+```{r}
+top_5 <- airbnbreport %>% 
+  count(city) %>% 
+  arrange(desc(n)) %>%
+  head(5) %>% 
+  pull(city)
+```
+## Historigram
+```{r}
+airbnbreport %>% 
+  ggplot(aes(x=average_rate_per_night)) + 
+  geom_histogram()
+```
+By default, geom_histogram() and geom_density() will take all the rows into account. If you have some extreme values, like with average_rate_per_night, you will lose a lot of details in the area where most points are. Above most values are put in the first bin (i.e. bar) as bins must be equal sized and there is one value at 10000.
+
+In this case, it might be interesting to "zoom" on the area of interest by removing the most extreme values.
+```{r}
+airbnbreport %>% 
+  filter(average_rate_per_night < 200) %>%
+  ggplot(aes(x=average_rate_per_night)) + 
+  geom_histogram()
+```
+When you want to compare the distribution of multiple groups, density charts often work better than histograms. It is easier to see trends with lines than overlapping bars, density charts show percentages so it doesn't matter if one group has twice as many values as the other.
+How do create a density chart like the one above? A plot with one density line per city for the three cities with the most listings, filling each area with a different color?
+
+```{r}
+topcity <- airbnbreport %>%
+   count(city, name = "nb_listings") %>%
+   slice_max(order_by= nb_listings, n= 3) %>%
+   pull(city)
+
+airbnbreport %>%
+  filter(city %in% topcity) %>%
+  filter(average_rate_per_night < 150) %>%
+  ggplot(aes(x=average_rate_per_night,fill=city))+
+  geom_density(alpha=0.4)
+```
+## Maps
+```{r}
+airbnbreport %>%
+  ggplot(aes(x=longitude, y=latitude)) +
+  geom_point(alpha=0.5)
+```
+So latitude and longitude can be used as coordinates… All we need is a matching map layer to put below it, and this is what the package {ggmap} is used for.
+
+First, we need to register an API key
+```{r}
+register_stadiamaps("5f54e0a3-5721-407e-b249-a9a9d700d82e", write=FALSE)
+stadiamaps_key()
+has_stadiamaps_key()
+```
+
+```{r}
+texas_area <- c(left=-107.86, bottom=25.12, right=-92.26, top=36.94)
+texas_map <- get_stadiamap(bbox=texas_area, zoom=7)
+
+ggmap(texas_map) +
+  geom_point(data=airbnbreport, 
+             aes(x=longitude, y=latitude), alpha=0.5) +
+  labs(title="Where are AirBNB listings in Texas?",
+       subtitle="Geolocation of 18k listings over the last 8 years")
+```
+With leaflet
+```{r}
+airbnbreport %>%
+  sample_n(100) %>% # Remove at your own risk
+  leaflet() %>% 
+  addTiles() %>% 
+  addMarkers(lng=~longitude,lat=~latitude,
+             label=~as.character(average_rate_per_night),
+             popup=~description)
+```
+
+## Animated graphs
+```{r}
+mp <- tribble(
+  ~Month,~Area,~Price,
+  "2017-01", "EU",   "12",
+  "2017-01", "USA",  "17",
+  "2017-02", "EU",   "11",
+  "2017-02", "USA",  "13",
+  "2017-03", "EU",   "8",
+  "2017-03", "USA",  "11",
+  "2017-04", "EU",   "10",
+  "2017-04", "USA",  "15"
+)
+
+plot <- mp %>%
+  mutate(Month=lubridate::parse_date_time(Month, orders="ym"),
+         Price=as.numeric(Price)) %>%
+  ggplot(mapping=aes(x=Month, y=Price)) +
+  geom_line(mapping=aes(color=Area, group=Area), linewidth=2) +
+  theme_minimal() +
+  labs(title="Price per Area per Month",
+       subtitle="EU prices are lower than USA ones")
+plot +
+  gganimate::transition_reveal(along=Month)
+```

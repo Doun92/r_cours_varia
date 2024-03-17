@@ -1,0 +1,325 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Exercices on Swiss Cows data
+## Part 1: Import the data
+
+The data set of Swiss cows weights is in csv file swiss_cows_data.csv. Import the data in R using function readr::read_csv(), and then save it in a tibble that you will name cows.
+
+```{r message=FALSE, warning=FALSE}
+library(readr)
+library(tibble)
+library(dplyr)
+library(tidyr)
+library(janitor)
+library(purrr)
+library(stringr)
+library(visdat)
+#Sampling calcualtion
+library(infer)
+#For data visualisation
+library(ggplot2)
+```
+
+The second step is the downloading and storing into a general value, the datasets.
+```{r}
+fitness_members_raw <- read_csv("data/fitness_members.csv")
+fitness_tracking_raw <- read_csv("data/fitness_tracking.csv")
+
+swiss_cows_raw <- read.csv("data/swiss_cows_data.csv", colClasses = c(
+  num = "character"))
+```
+## Part 2: Perform a t-test using the first 3 cows of each breed
+
+Do you remember the question of interest of Dr Heidi Lamucca ? Are Brown Swiss cows heavier than Swiss Red Holstein cows ?
+
+In this part, you will focus on the first 3 cows of each breed, i.e. 6 cows in total. First create the cows_03 tibble as follows:
+
+```{r}
+cows_03 <- swiss_cows_raw %>%
+  mutate(num = as.numeric(num)) %>%
+  filter(num <= 3)
+```
+
+Before doing a t-test using cows_03 data, produce a summary table with sample size, arithmetic mean, and standard deviation for each breed of cattle.
+
+Brown swiss
+sample size + arithmetic mean + standard deviation
+
+Swiss red Holstein
+sample size + arithmetic mean + standard deviation
+
+```{r}
+swiss_cows_raw %>%
+  group_by(breed) %>%
+  summarise(
+    number_cows = n(),
+    mean_weight = mean(weight),
+    sd_weight = sd(weight)
+    )
+```
+Let's comapre with our sample
+```{r}
+cows_03 %>%
+  group_by(breed) %>%
+  summarise(
+    number_cows = n(),
+    mean_weight = mean(weight),
+    sd_weight = sd(weight)
+    )
+```
+The t-test provides you with an objective tool to compare the two obtained means. With the {infer} package, you can perform the t-test as follows:
+```{r}
+my_test <- cows_03 %>% 
+  t_test(formula = weight ~ breed,
+  order = c("Brown_Swiss", "Swiss_Red_Holstein"),
+                              conf_level = 0.95)
+```
+In the above code, we saved the results of the t-test in my_test. Let's have a look at its components:
+```{r}
+my_test
+```
+Let's focus first on the last two elements: lower_ci and upper_ci. They correspond to the lower and upper limits of the 95% confidence interval (ci) for the difference between Brown Swiss average weight and Swiss Red Holstein average weight.
+
+This interval contains the zero value. This means that the cows_03 data set does not provide enough evidence that Brown Swiss are heavier than Swiss Red Holstein.
+
+This is also confirmed by the p-value of 0.279: having chosen a confidence level of 0.95, and the resulting p-value being higher than 0.05, we conclude that the difference between the two average weights is not statistically significant at the level of 0.05.
+
+You can visualize the steps of the t-test process with the following code:
+```{r}
+t_obs <- my_test %>%
+  select(statistic)
+
+cows_03 %>%
+  specify(formula = weight ~ breed) %>%
+  hypothesize(null = 'independence') %>%
+  calculate(stat = "t") %>%
+  visualise(method = "theoretical") +
+  shade_p_value(obs_stat = t_obs, direction = "both") +
+  theme_minimal()
+```
+In the above code, the observed t-statistic is saved first in t_obs. This value is used in the subsequent block to visualize the p-value. The verbs specify, hypothesize, calculate and visualise correspond to basic {infer} actions to perform statistical tests. The function shade_p_value is then used to visualise the resulting p-value in the graphical output.
+
+In the resulting graph, the area under the density curve is equal to 1. What is the area of the red region under this density curve ?
+
+This is the right answer. The area of the red region under the density curve corresponds actually to the p-value obtained in my_test.
+
+## Part 3: Perform a t-test using only the first cow of each breed
+Create tibble cows_01 with only one cow from each breed, i.e. 2 cows in total. Perform the t-test on this data set using the t_test function like you did with cows_03 data.
+
+What results do you obtain ? Try to explain what is going on here.
+```{r}
+cows_01 <- swiss_cows_raw %>%
+  mutate(num = as.numeric(num)) %>%
+  filter(num <= 1)
+
+my_test01 <- cows_01 %>% 
+  t_test(formula = weight ~ breed,
+  order = c("Brown_Swiss", "Swiss_Red_Holstein"),
+                              conf_level = 0.95)
+```
+I got an error: "Erreur dans t.test.default(x = DATA[[1L]], y = DATA[[2L]], ...) : 
+  nombre d'observations 'x' insuffisant"
+This error occurs because I don't have enough data to do calculate a mean.
+
+## Part 4: Perform a t-test using all the cows of each breed
+Perform the t-test on the whole cows data set using the t_test function. Produce as well the density graph showing the resulting p-value of the t-test.
+
+What are the lower and upper limits of the 95% confidence interval for the difference between the average weight of Brown Swiss and the average weight of Red Swiss Holstein ?
+```{r}
+my_test_allcows <- swiss_cows_raw %>% 
+  t_test(formula = weight ~ breed,
+  order = c("Brown_Swiss", "Swiss_Red_Holstein"),
+                              conf_level = 0.95)
+
+my_test_allcows
+
+t_obs <- my_test_allcows %>%
+  select(statistic)
+
+swiss_cows_raw %>%
+  specify(formula = weight ~ breed) %>%
+  hypothesize(null = 'independence') %>%
+  calculate(stat = "t") %>%
+  visualise(method = "theoretical") +
+  shade_p_value(obs_stat = t_obs, direction = "both") +
+  theme_minimal()
+```
+Right answer ! This confidence interval does not contain the zero value. The cows data set provides therefore enough evidence that Brown Swiss are heavier than Swiss Red Holstein.
+
+Is the p-value greater or lower than 0.05 ? Write in your report the conclusion that you get from the t-test. Use the words difference and statistically significant.
+
+The p-value is 1.258282e-10, which means ~0.0000000001258282, so really lower than 0.05.
+The fact that the p value is lower than 0.05 means we can reject the null hypothesis and that the test is statistically significant at 99%. It means that the weight between the two breeds of cows is significantly different.
+
+# Exercices on Fitness Club data
+## Part 5: Import the data
+Already done.
+
+## Part 6: t-test
+Let's try to see with the data if there is an evolution of bmi.
+
+First, let's create a table with the BMI as value.
+```{r}
+# Only get wk_000
+week_one_tibble <- fitness_members_raw %>%
+  mutate(wk_000 = weight) %>%
+  select(id,m_category,height,wk_000)
+
+colnames_fitness_tracker <- colnames(fitness_tracking_raw)
+# Let's just remove the id column from this vector
+colnames_fitness_tracker <- colnames_fitness_tracker[!colnames_fitness_tracker == 'id']
+colnames_fitness_tracker <- append(colnames_fitness_tracker, 'wk_000')
+
+# List of dfs to join them
+list_df <- list(week_one_tibble, fitness_tracking_raw)
+
+# Join both tibbles
+fitness_tracking_with_wk_000 <- list_df %>%
+  reduce(left_join, by='id')
+
+# Now we can pivot longer
+fitness_tracking_long <- fitness_tracking_with_wk_000 %>%
+  pivot_longer(cols = all_of(colnames_fitness_tracker), names_to = "week_nb", values_to = "weight") %>%
+  drop_na()
+
+calculate_bmi <- function(w,h){
+  w / (h/100)^2
+}
+  
+fitness_tracking_long <- fitness_tracking_long %>%
+  group_by(id) %>%
+  mutate(bmi = calculate_bmi(weight,height)) %>%
+  mutate_if(is.numeric,
+            round,
+            digits = 1)
+```
+
+With the boxplot and the summarise of the data, we can see that,there were some changes in the bmi.
+It is even more interesting if we focus on the top 10 people who did the 52 weeks program.
+```{r}
+fitness_tracking_long_head_10 <- fitness_tracking_long %>%
+  select(id,week_nb,bmi)%>%
+  group_by(id) %>%
+  pivot_wider(
+    names_from = week_nb,
+    values_from = bmi
+  ) %>%
+  relocate(wk_000) %>%
+  relocate(id) %>%
+  head(10)
+
+#Creation of a tibble which shows the means of the bmi for each week
+weekly_means_for_head_10 <- tibble(
+  colnames(fitness_tracking_long_head_10),
+  map_dbl(fitness_tracking_long_head_10, mean)
+  ) %>%
+  rename(week_nb = 1,
+         mean_value = 2) %>%
+  slice(-1)
+
+
+ggplot(data=weekly_means_for_head_10, aes(x=week_nb, y=mean_value)) +
+  geom_point()
+```
+As we can see in the chart above, the mean value of the bmi of the 10 first people in the fitness database decreased after 52 weeks.
+
+
+Do we observe a different evolution of BMI from week 0 to week 12 in the different fitness club membership categories ?
+
+
+```{r}
+calculate_bmi <- function(w,h){
+  w / (h/100)^2
+}
+
+calculate_mean_bmi_of_a_week <- function(h, w, c){
+  
+  (sum(w,na.rm = TRUE)/c)/((sum(h)/c)/100)^2
+}
+
+weeks_to_12 <- c("wk_000","wk_001","wk_002","wk_003","wk_004","wk_005","wk_006","wk_007","wk_008","wk_009","wk_010","wk_011","wk_012")
+
+fitness_tracking_means_by_week_to_12 <- fitness_tracking_with_wk_000 %>%
+  select(id,m_category,height,numerical_cols_fitness_tracking_12) %>%
+  group_by(m_category) %>%
+  mutate(count_cat = n()) %>%
+  mutate(wk_000 = calculate_mean_bmi_of_a_week(height,wk_000,count_cat)) %>%
+  mutate(wk_001 = calculate_mean_bmi_of_a_week(height,wk_001,count_cat)) %>%
+  mutate(wk_002 = calculate_mean_bmi_of_a_week(height,wk_002,count_cat)) %>%
+  mutate(wk_003 = calculate_mean_bmi_of_a_week(height,wk_003,count_cat)) %>%
+  mutate(wk_004 = calculate_mean_bmi_of_a_week(height,wk_004,count_cat)) %>%
+  mutate(wk_005 = calculate_mean_bmi_of_a_week(height,wk_005,count_cat)) %>%
+  mutate(wk_006 = calculate_mean_bmi_of_a_week(height,wk_006,count_cat)) %>%
+  mutate(wk_007 = calculate_mean_bmi_of_a_week(height,wk_007,count_cat)) %>%
+  mutate(wk_008 = calculate_mean_bmi_of_a_week(height,wk_008,count_cat)) %>%
+  mutate(wk_009 = calculate_mean_bmi_of_a_week(height,wk_009,count_cat)) %>%
+  mutate(wk_010 = calculate_mean_bmi_of_a_week(height,wk_010,count_cat)) %>%
+  mutate(wk_011 = calculate_mean_bmi_of_a_week(height,wk_011,count_cat)) %>%
+  mutate(wk_012 = calculate_mean_bmi_of_a_week(height,wk_012,count_cat)) %>%
+  distinct(m_category, .keep_all = TRUE) %>%
+  select(-1, -3) %>%
+  mutate_if(is.numeric,
+            round,
+            digits = 1) %>%
+  pivot_longer(
+    cols = weeks_to_12,
+    names_to = "week_nb",
+    values_to = "mean_bmi"
+    ) %>%
+  select(-2) %>%
+  ungroup()
+```
+Now we have data a bit better prepared, we can do the t_test.
+
+```{r}
+ggplot(fitness_tracking_means_by_week_to_12, aes(x=week_nb, y=mean_bmi, group=m_category)) +
+  geom_line(aes(color=m_category))+
+  geom_point(aes(color=m_category))
+```
+The line chart above show use how the 3 mean bmi evoluate depending on the category.
+And the t_test:
+```{r}
+fitness_tracking_means_by_week_to_12 %>% 
+  t_test(formula = mean_bmi ~ m_category,
+  order = c("Economy", "Premium"),
+                              conf_level = 0.95)
+```
+
+
+## Chi-squared test
+The chi-squared test can be used to perform an inferential analysis on this data. Before doing it, execute the following code:
+
+```{r}
+fitness_members <-  fitness_members_raw %>%
+  mutate(m_category = factor(m_category, levels = c("Economy", "Balance", "Premium")))
+
+fitness_members
+```
+
+Use chisq_test() function of {infer} package. The first argument required by this function is data, i.e. fitness_members in this case. The second argument is formula to be specified with the same format as for t_test() that you used in Part 2, i.e. with the format factor_1 ~ factor_2.
+
+```{r}
+chisq_test_fitness_members <- fitness_members %>%
+  chisq_test(
+    formula = gender ~ m_category
+  )
+chisq_test_fitness_members
+```
+
+## Part 8: Visualise p-value
+Use specify, hypothesize, calculate, visualise and shade_p_value functions of {infer} package to visualise the p-value that you obtained with chisq_test().
+
+```{r}
+fitness_members %>%
+    specify(
+      formula = gender ~ m_category,
+      ) %>%
+  hypothesize(null = "independence") %>%
+  assume(distribution = "Chisq") %>%
+  visualize()+
+  shade_p_value(obs_stat = chisq_test_fitness_members, direction = "greater") +
+  theme_minimal()
+```
